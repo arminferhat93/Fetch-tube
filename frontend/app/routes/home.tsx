@@ -157,6 +157,102 @@ function ToggleGroup<T extends string>({
   );
 }
 
+/* ── Video guide ─────────────────────────────────────────────── */
+
+const VIDEO_STEPS = [
+  {
+    number: "1",
+    title: "Open the video on YouTube",
+    steps: [
+      "Go to youtube.com and find the video you want to download.",
+      "Make sure the video is public — private or age-restricted videos cannot be downloaded.",
+    ],
+  },
+  {
+    number: "2",
+    title: "Copy the share URL",
+    steps: [
+      'Click the "Share" button below the video (arrow icon).',
+      'In the share dialog, click "Copy link" — this gives you a short youtu.be/... URL.',
+      "Paste that link into the input field above.",
+    ],
+    highlight: "The address-bar URL (youtube.com/watch?v=...) works too, but the Share link is more reliable. If one fails, try the other.",
+  },
+  {
+    number: "3",
+    title: "Choose format and download",
+    steps: [
+      'Select "Audio" for MP3 or "Video" for MP4.',
+      "Pick your preferred quality (bitrate for audio, resolution for video).",
+      'Click "Download" — your file will be ready in seconds.',
+    ],
+  },
+];
+
+function VideoGuide() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="bg-zinc-900/60 border border-zinc-800/70 rounded-2xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-zinc-800/40 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-red-600/10 border border-red-500/15 flex items-center justify-center flex-shrink-0">
+            <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M15 10l4.553-2.069A1 1 0 0121 8.883v6.234a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-200">How to download a single video</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Use the Share link if the browser URL doesn't work</p>
+          </div>
+        </div>
+        <svg
+          className={`w-4 h-4 text-zinc-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-6 space-y-6 border-t border-zinc-800/60 pt-5">
+          {VIDEO_STEPS.map((section) => (
+            <div key={section.number} className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-md bg-red-600/15 border border-red-500/20 text-red-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                  {section.number}
+                </div>
+                <h3 className="text-sm font-semibold text-zinc-200">{section.title}</h3>
+              </div>
+              <ol className="space-y-2 ml-8">
+                {section.steps.map((step, i) => (
+                  <li key={i} className="flex gap-2.5 text-xs text-zinc-400 leading-relaxed">
+                    <span className="text-zinc-600 tabular-nums flex-shrink-0 w-4">{i + 1}.</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              {section.highlight && (
+                <div className="ml-8 flex items-start gap-2 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2.5">
+                  <svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-xs text-red-300">{section.highlight}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Playlist guide ──────────────────────────────────────────── */
 
 const GUIDE_STEPS = [
@@ -658,8 +754,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Playlist guide */}
-        <div className="w-full max-w-lg">
+        {/* Help panels */}
+        <div className="w-full max-w-lg space-y-3">
+          <VideoGuide />
           <PlaylistGuide />
         </div>
       </div>

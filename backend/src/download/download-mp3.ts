@@ -61,10 +61,12 @@ export function getVideoFilename(url: string, opts: DownloadOptions): Promise<st
   return new Promise((resolve, reject) => {
     const p = spawn('yt-dlp', [url, '--print', `%(title)s.${ext}`, '--no-download', '--no-warnings']);
     let out = '';
+    let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+    p.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp metadata failed (code ${code})`)); return; }
+      if (code !== 0) { reject(new Error(`yt-dlp metadata failed (code ${code}): ${err.trim()}`)); return; }
       resolve(out.trim() || `video.${ext}`);
     });
   });
@@ -136,10 +138,12 @@ export function getPlaylistIds(playlistId: string): Promise<string[]> {
       '--flat-playlist', '--print', 'id', '--no-warnings',
     ]);
     let out = '';
+    let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+    p.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp playlist failed (code ${code})`)); return; }
+      if (code !== 0) { reject(new Error(`yt-dlp playlist failed (code ${code}): ${err.trim()}`)); return; }
       resolve(out.split('\n').map(l => l.trim()).filter(Boolean));
     });
   });
@@ -154,9 +158,12 @@ export function getPlaylistTitle(playlistId: string): Promise<string | null> {
       '--no-warnings',
     ]);
     let out = '';
+    let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+    p.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
     p.on('error', () => resolve(null));
     p.on('close', (code) => {
+      if (code !== 0 && err.trim()) process.stderr.write(`[getPlaylistTitle] ${err.trim()}\n`);
       const title = out.trim();
       resolve(code === 0 && title ? title : null);
     });
