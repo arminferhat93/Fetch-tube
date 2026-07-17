@@ -1,0 +1,62 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    command: npm run dev:docker
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      PORT: "4000"
+      REDIS_URL: "redis://redis:6379"
+      STORAGE_DIR: /tmp/downloads
+      DOWNLOAD_CONCURRENCY: ${DOWNLOAD_CONCURRENCY:-5}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEV_KEEP_FILES: ${DEV_KEEP_FILES:-false}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - downloads_data:/tmp/downloads
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    command: npm run dev
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
+      VITE_SITE_URL: ${VITE_SITE_URL:-}
+      VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
+      VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-}
+      VITE_CREATED_BY: ${VITE_CREATED_BY:-}
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  redis_data:
+  downloads_data:

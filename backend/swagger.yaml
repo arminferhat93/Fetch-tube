@@ -1,0 +1,286 @@
+openapi: 3.0.3
+
+info:
+  title: YouTube Downloader API
+  description: |
+    Async YouTube download service powered by **yt-dlp** + **BullMQ**.
+
+    ## Flow
+    1. `POST /api/downloads` — enqueue a job, get back a `jobId`
+    2. `GET /api/downloads/{jobId}/status` — poll until `completed`
+    3. `GET /api/downloads/{jobId}/file` — stream the ZIP
+
+    Audio tracks are piped directly from yt-dlp into a streaming ZIP — no per-track temp files.
+    The finished ZIP is stored in `/tmp/downloads/{jobId}.zip` and expires **1 hour** after download.
+  version: 1.0.0
+  contact:
+    name: YouTube Downloader
+
+servers:
+  - url: http://localhost:4000/api
+    description: Local development
+
+tags:
+  - name: Downloads
+    description: Create and manage download jobs
+
+paths:
+  /downloads:
+    post:
+      tags: [Downloads]
+      summary: Create a download job
+      description: |
+        Enqueues a download job and returns `202 Accepted` immediately.
+        The worker fetches metadata, downloads all tracks concurrently (up to 5 at a time),
+        and streams them into a single ZIP archive.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDownloadRequest'
+            examples:
+              audio_ids:
+                summary: Two tracks as 320 kbps MP3
+                value:
+                  ids: ["dQw4w9WgXcQ", "ScMzIvxBSi4"]
+                  mode: audio
+                  bitrate: 320
+              playlist_audio:
+                summary: Full playlist as audio
+                value:
+                  playlist: "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
+                  mode: audio
+              video_1080:
+                summary: Single video at 1080p
+                value:
+                  ids: ["dQw4w9WgXcQ"]
+                  mode: video
+                  quality: 1080
+              mixed:
+                summary: Specific IDs + playlist
+                value:
+                  ids: ["dQw4w9WgXcQ"]
+                  playlist: "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
+                  mode: audio
+                  bitrate: 192
+      responses:
+        '202':
+          description: Job accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDownloadResponse'
+              example:
+                jobId: "42"
+                status: processing
+        '400':
+          description: Validation error — missing `ids` and `playlist`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Provide at least one id in ids[] or a playlist ID
+
+  /downloads/{jobId}/status:
+    get:
+      tags: [Downloads]
+      summary: Get job status
+      description: |
+        Poll this endpoint until `status` is `completed` or `failed`.
+        When `active`, a `progress` percentage (0–100) is included.
+      parameters:
+        - $ref: '#/components/parameters/jobId'
+      responses:
+        '200':
+          description: Current job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+              examples:
+                waiting:
+                  summary: Job is queued
+                  value:
+                    status: waiting
+                active:
+                  summary: Job is in progress
+                  value:
+                    status: active
+                    progress: 52
+                completed:
+                  summary: Job finished successfully
+                  value:
+                    status: completed
+                failed:
+                  summary: Job failed
+                  value:
+                    status: failed
+                    error: "yt-dlp exited with code 1"
+        '400':
+          description: Invalid job ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Job not found
+
+  /downloads/{jobId}/file:
+    get:
+      tags: [Downloads]
+      summary: Download the finished ZIP
+      description: |
+        Streams the ZIP file to the client. Only available when `status = completed`.
+        The file is **deleted 1 hour after this endpoint is first called** (configurable via `ZIP_TTL_MS`).
+      parameters:
+        - $ref: '#/components/parameters/jobId'
+      responses:
+        '200':
+          description: ZIP file stream
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              example: 'attachment; filename="42.zip"'
+            Content-Length:
+              schema:
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+                example: application/zip
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid job ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Job is not yet completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Job not completed yet
+                status: active
+        '410':
+          description: File has expired or was cleaned up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: File has expired or was not found
+
+components:
+  parameters:
+    jobId:
+      in: path
+      name: jobId
+      required: true
+      schema:
+        type: string
+        pattern: '^[\w\-]{1,64}$'
+      description: Job ID returned by `POST /api/downloads`
+      example: "42"
+
+  schemas:
+    CreateDownloadRequest:
+      type: object
+      description: At least one of `ids` or `playlist` must be provided.
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+          description: YouTube video IDs or full `youtube.com/watch?v=` URLs
+          example: ["dQw4w9WgXcQ", "ScMzIvxBSi4"]
+        playlist:
+          type: string
+          nullable: true
+          description: YouTube playlist ID (e.g. `PLxxxxxxxxxxxxxxxx`)
+          example: "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
+        mode:
+          type: string
+          enum: [audio, video]
+          default: audio
+          description: |
+            `audio` — extracts and converts to MP3 (streams directly, no temp file)
+            `video` — downloads and muxes to MP4 (requires a temp file for muxing)
+        bitrate:
+          type: integer
+          enum: [128, 192, 320]
+          default: 192
+          description: MP3 bitrate in kbps. Ignored when `mode = video`.
+        quality:
+          type: integer
+          enum: [720, 1080, 1440, 2160]
+          default: 1080
+          description: Maximum video height in pixels. Ignored when `mode = audio`.
+
+    CreateDownloadResponse:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId:
+          type: string
+          description: Use this ID for status and file endpoints
+          example: "42"
+        status:
+          type: string
+          example: processing
+
+    JobStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [waiting, active, completed, failed]
+          description: |
+            `waiting` — queued, not started yet
+            `active`  — worker is downloading
+            `completed` — ZIP is ready
+            `failed` — all retry attempts exhausted
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Download percentage. Only present when `status = active`.
+          example: 52
+        error:
+          type: string
+          description: Failure reason. Only present when `status = failed`.
+          example: "yt-dlp exited with code 1"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Job not found
+        status:
+          type: string
+          description: Current job status (only included on 409 responses)
+          example: active

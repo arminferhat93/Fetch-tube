@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(timeout 5 npm start)",
+      "Bash(docker compose *)",
+      "Bash(docker build *)",
+      "Bash(docker run *)",
+      "Bash(docker rmi *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node --env-file ../.env -e \"console.log\\('PORT:', process.env.PORT, '| REDIS_URL:', process.env.REDIS_URL, '| VITE_API_URL:', process.env.VITE_API_URL\\)\")",
+      "Bash(curl *)",
+      "Bash(lsof -i :4000 -sTCP:LISTEN)",
+      "Bash(node *)"
+    ]
+  }
+}
