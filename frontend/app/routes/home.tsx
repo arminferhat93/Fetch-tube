@@ -74,15 +74,32 @@ const JSON_LD = {
 
 /* ── URL / ID parsing ────────────────────────────────────────── */
 
+// Real user-created playlists start with PL, FL, UU, or LL.
+// RD/OL/TL/etc. are auto-generated YouTube mixes — yt-dlp can't fetch them.
+function isDownloadablePlaylist(id: string): boolean {
+  return /^(?:PL|FL|UU|LL)[A-Za-z0-9_-]{10,}$/.test(id);
+}
+
 function parseInput(raw: string): { ids?: string[]; playlist?: string } | null {
   const s = raw.trim();
   if (!s) return null;
 
+  // Extract video ID first (present in most URLs, including mix/radio URLs).
+  const videoMatch = s.match(/(?:[?&]v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);
+
+  // Only treat list= as a playlist when it's a real user playlist.
   const listMatch = s.match(/[?&]list=([A-Za-z0-9_-]+)/);
-  if (listMatch) return { playlist: listMatch[1] };
+  if (listMatch && isDownloadablePlaylist(listMatch[1])) {
+    return { playlist: listMatch[1] };
+  }
 
-  if (/^(?:PL|RD|FL|UU|LL)[A-Za-z0-9_-]{10,}$/.test(s)) return { playlist: s };
+  // Mix/radio URLs — fall back to the video ID in the same URL.
+  if (videoMatch) return { ids: [videoMatch[1]] };
 
+  // Bare playlist ID typed directly.
+  if (isDownloadablePlaylist(s)) return { playlist: s };
+
+  // Multiple video IDs / URLs pasted line-by-line or comma-separated.
   const ids: string[] = [];
   for (const part of s.split(/[,\n\s]+/).filter(Boolean)) {
     const m = part.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);

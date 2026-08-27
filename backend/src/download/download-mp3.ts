@@ -31,16 +31,20 @@ function checkBinary(bin: string, versionFlag = '--version'): Promise<boolean> {
   });
 }
 
+// android client bypasses bot-detection and the tv-client DRM experiment; web is the fallback.
+const EXTRACTOR_ARGS = '--extractor-args=youtube:player_client=android,web';
+
 function buildFormatArgs(opts: DownloadOptions): string[] {
   if (opts.mode === 'video') {
     const quality = opts.quality ?? 1080;
     return [
+      EXTRACTOR_ARGS,
       '-f', `bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}]`,
       '--merge-output-format', 'mp4',
     ];
   }
   const bitrate = opts.bitrate ?? 192;
-  return ['-x', '--audio-format', 'mp3', '--audio-quality', `${bitrate}K`];
+  return [EXTRACTOR_ARGS, '-x', '--audio-format', 'mp3', '--audio-quality', `${bitrate}K`];
 }
 
 // Attaches a stderr listener that parses yt-dlp's "[download] X%" progress lines.
@@ -58,8 +62,10 @@ function watchProgress(stderr: NodeJS.ReadableStream, onProgress: ProgressCallba
 
 export function getVideoFilename(url: string, opts: DownloadOptions): Promise<string> {
   const ext = opts.mode === 'audio' ? 'mp3' : 'mp4';
+  const args = [url, EXTRACTOR_ARGS, '--print', `%(title)s.${ext}`, '--no-download', '--no-warnings'];
+  if (opts.cookies) args.push('--cookies', opts.cookies);
   return new Promise((resolve, reject) => {
-    const p = spawn('yt-dlp', [url, '--print', `%(title)s.${ext}`, '--no-download', '--no-warnings']);
+    const p = spawn('yt-dlp', args);
     let out = '';
     let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
@@ -85,7 +91,7 @@ export function createAudioStream(url: string, opts: DownloadOptions, onProgress
   return proc.stdout;
 }
 
-// Video mode requires muxing, so yt-dlp must write to a temp file first.
+// Writes to a temp file (needed for muxing or reliable error detection).
 // The returned stream deletes the temp file on close.
 export function downloadToTemp(url: string, opts: DownloadOptions, tmpDir: string, onProgress?: ProgressCallback): Promise<Readable> {
   const ext = opts.mode === 'audio' ? 'mp3' : 'mp4';
@@ -94,15 +100,16 @@ export function downloadToTemp(url: string, opts: DownloadOptions, tmpDir: strin
   if (opts.cookies) args.push('--cookies', opts.cookies);
 
   return new Promise((resolve, reject) => {
+    let stderrBuf = '';
     const proc = spawn('yt-dlp', args);
-    if (onProgress) {
-      watchProgress(proc.stderr, onProgress);
-    } else {
-      proc.stderr.pipe(process.stderr);
-    }
+    proc.stderr.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString(); });
+    if (onProgress) watchProgress(proc.stderr, onProgress);
     proc.on('error', reject);
     proc.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp exited ${code}`)); return; }
+      if (code !== 0) {
+        reject(new Error(`yt-dlp exited ${code}: ${stderrBuf.slice(-500).trim()}`));
+        return;
+      }
       const fileStream = fs.createReadStream(tmpPath);
       fileStream.on('close', () => fs.rm(tmpPath, { force: true }, () => {}));
       resolve(fileStream);
@@ -117,26 +124,29 @@ export function downloadToFile(url: string, opts: DownloadOptions, outPath: stri
   if (opts.cookies) args.push('--cookies', opts.cookies);
 
   return new Promise((resolve, reject) => {
+    let stderrBuf = '';
     const proc = spawn('yt-dlp', args);
-    if (onProgress) {
-      watchProgress(proc.stderr, onProgress);
-    } else {
-      proc.stderr.pipe(process.stderr);
-    }
+    proc.stderr.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString(); });
+    if (onProgress) watchProgress(proc.stderr, onProgress);
     proc.on('error', reject);
     proc.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp exited ${code}`)); return; }
+      if (code !== 0) {
+        reject(new Error(`yt-dlp exited ${code}: ${stderrBuf.slice(-500).trim()}`));
+        return;
+      }
       resolve(fs.createReadStream(outPath));
     });
   });
 }
 
-export function getPlaylistIds(playlistId: string): Promise<string[]> {
+export function getPlaylistIds(playlistId: string, cookies?: string): Promise<string[]> {
+  const args = [
+    `https://www.youtube.com/playlist?list=${playlistId}`,
+    EXTRACTOR_ARGS, '--flat-playlist', '--print', 'id', '--no-warnings',
+  ];
+  if (cookies) args.push('--cookies', cookies);
   return new Promise((resolve, reject) => {
-    const p = spawn('yt-dlp', [
-      `https://www.youtube.com/playlist?list=${playlistId}`,
-      '--flat-playlist', '--print', 'id', '--no-warnings',
-    ]);
+    const p = spawn('yt-dlp', args);
     let out = '';
     let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
@@ -149,14 +159,16 @@ export function getPlaylistIds(playlistId: string): Promise<string[]> {
   });
 }
 
-export function getPlaylistTitle(playlistId: string): Promise<string | null> {
+export function getPlaylistTitle(playlistId: string, cookies?: string): Promise<string | null> {
+  const args = [
+    `https://www.youtube.com/playlist?list=${playlistId}`,
+    EXTRACTOR_ARGS, '--print', 'playlist_title',
+    '--playlist-items', '1',
+    '--no-warnings',
+  ];
+  if (cookies) args.push('--cookies', cookies);
   return new Promise((resolve) => {
-    const p = spawn('yt-dlp', [
-      `https://www.youtube.com/playlist?list=${playlistId}`,
-      '--print', 'playlist_title',
-      '--playlist-items', '1',
-      '--no-warnings',
-    ]);
+    const p = spawn('yt-dlp', args);
     let out = '';
     let err = '';
     p.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });

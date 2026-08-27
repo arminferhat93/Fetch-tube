@@ -3,7 +3,6 @@ import path from 'path';
 import {
   toUrl,
   getVideoFilename,
-  createAudioStream,
   downloadToTemp,
   downloadToFile,
   getPlaylistIds,
@@ -17,6 +16,20 @@ import type { DownloadJobData, DownloadJobResult, DownloadOptions } from '../typ
 const CONCURRENCY    = parseInt(process.env.DOWNLOAD_CONCURRENCY ?? '5', 10);
 const STORAGE_DIR    = process.env.STORAGE_DIR ?? '/tmp/downloads';
 const DEV_KEEP_FILES = process.env.DEV_KEEP_FILES === 'true';
+
+function resolveCookiesFile(): string | undefined {
+  const p = process.env.COOKIES_FILE;
+  if (!p) return undefined;
+  const stat = fs.statSync(p, { throwIfNoEntry: false });
+  if (!stat || !stat.isFile() || stat.size === 0) {
+    if (stat) process.stderr.write(`[cookies] COOKIES_FILE="${p}" is not a valid cookies file — skipping\n`);
+    return undefined;
+  }
+  process.stderr.write(`[cookies] using cookies from ${p}\n`);
+  return p;
+}
+
+const COOKIES_FILE = resolveCookiesFile();
 
 // Strip non-ASCII (emojis, accented chars like ć č š đ ž) and filesystem-unsafe chars.
 // Keeps the filename clean and safe across all OS / HTTP layers.
@@ -37,7 +50,7 @@ interface VideoEntry {
 async function resolveIds(data: DownloadJobData): Promise<string[]> {
   const ids: string[] = [...(data.ids ?? [])];
   if (data.playlist) {
-    ids.push(...await getPlaylistIds(data.playlist));
+    ids.push(...await getPlaylistIds(data.playlist, COOKIES_FILE));
   }
   return ids.filter(Boolean);
 }
@@ -65,6 +78,7 @@ export async function processDownloadJob(
     mode: data.mode,
     bitrate: data.bitrate,
     quality: data.quality,
+    cookies: COOKIES_FILE,
   };
 
   const rawIds = await resolveIds(data);
@@ -77,7 +91,7 @@ export async function processDownloadJob(
   log.info({ count: urls.length }, 'fetching metadata');
   const [entries, playlistTitle] = await Promise.all([
     fetchMetadata(urls, opts),
-    data.playlist ? getPlaylistTitle(data.playlist) : Promise.resolve(null),
+    data.playlist ? getPlaylistTitle(data.playlist, COOKIES_FILE) : Promise.resolve(null),
   ]);
 
   // ── Single file: stream directly to disk, no ZIP ──────────────────────────
@@ -156,10 +170,8 @@ export async function processDownloadJob(
             const outPath = path.join(debugDir, sanitizeFilename(filename));
             log.debug({ outPath }, 'DEV: writing track to file');
             raw = await downloadToFile(url, opts, outPath, ytProgress);
-          } else if (opts.mode === 'video') {
-            raw = await downloadToTemp(url, opts, STORAGE_DIR, ytProgress);
           } else {
-            raw = createAudioStream(url, opts, ytProgress);
+            raw = await downloadToTemp(url, opts, STORAGE_DIR, ytProgress);
           }
 
           const stream = safeStream(raw, (err) => {

@@ -28,6 +28,7 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DEV_KEEP_FILES: ${DEV_KEEP_FILES:-false}
+      COOKIES_FILE: /app/cookies.txt
     depends_on:
       redis:
         condition: service_healthy
@@ -35,6 +36,7 @@ services:
       - ./backend:/app
       - /app/node_modules
       - downloads_data:/tmp/downloads
+      - ${COOKIES_HOST_PATH:-/dev/null}:/app/cookies.txt:ro
 
   frontend:
     build:

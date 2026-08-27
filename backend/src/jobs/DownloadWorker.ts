@@ -26,6 +26,8 @@ export function startDownloadWorker(): Worker<DownloadJobData, DownloadJobResult
     {
       connection: redisConnection,
       concurrency: WORKER_CONCURRENCY,
+      lockDuration: 300_000,   // 5 min — max time a job can run without renewing its lock
+      lockRenewTime: 60_000,   // renew every 1 min (must be < lockDuration / 2)
     },
   );
 
