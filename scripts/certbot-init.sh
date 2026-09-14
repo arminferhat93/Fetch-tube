@@ -23,6 +23,7 @@ $COMPOSE run --rm certbot certonly \
   --agree-tos \
   --no-eff-email \
   --force-renewal \
+  --cert-name "$DOMAIN" \
   -d "$DOMAIN"
 
 echo "==> Certificate issued. Reloading nginx..."
