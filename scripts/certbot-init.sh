@@ -14,7 +14,7 @@ if [ -z "$EMAIL" ]; then
   exit 1
 fi
 
-echo "==> Requesting Let's Encrypt certificate for ${DOMAIN} and www.${DOMAIN}"
+echo "==> Requesting Let's Encrypt certificate for ${DOMAIN}"
 
 $COMPOSE run --rm certbot certonly \
   --webroot \
@@ -22,10 +22,9 @@ $COMPOSE run --rm certbot certonly \
   --email "$EMAIL" \
   --agree-tos \
   --no-eff-email \
-  -d "$DOMAIN" \
-  -d "www.${DOMAIN}"
+  -d "$DOMAIN"
 
 echo "==> Certificate issued. Reloading nginx..."
 $COMPOSE exec nginx nginx -s reload
 
-echo "==> Done! ${DOMAIN} is now serving HTTPS."
+echo "==> Done! https://${DOMAIN} is live."
