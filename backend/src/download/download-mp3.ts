@@ -5,6 +5,28 @@ import { PassThrough } from 'stream';
 import type { Readable } from 'stream';
 import type { DownloadOptions } from '../types/index';
 
+function classifyStderr(stderr: string, exitCode: number): { errorCode: string; message: string } {
+  if (/Sign in to confirm you.re not a bot|Use --cookies|bot.?detection/i.test(stderr)) {
+    return { errorCode: 'AUTH_REQUIRED', message: 'YouTube requires authentication — cookies are missing or expired.' };
+  }
+  if (/This video is private/i.test(stderr)) {
+    return { errorCode: 'PRIVATE_VIDEO', message: 'This video is private and cannot be downloaded.' };
+  }
+  if (/age.?restrict/i.test(stderr)) {
+    return { errorCode: 'AGE_RESTRICTED', message: 'This video is age-restricted — valid cookies are required.' };
+  }
+  if (/Video unavailable|This video (?:is not available|has been removed|was removed)/i.test(stderr)) {
+    return { errorCode: 'VIDEO_UNAVAILABLE', message: 'This video is unavailable or has been removed.' };
+  }
+  return { errorCode: 'UNKNOWN', message: `yt-dlp exited ${exitCode}` };
+}
+
+function ytdlpError(stderr: string, exitCode: number): Error {
+  const { errorCode, message } = classifyStderr(stderr, exitCode);
+  process.stderr.write(`[yt-dlp:${errorCode}] ${stderr.slice(-800).trim()}\n`);
+  return new Error(`[${errorCode}] ${message}`);
+}
+
 export type ProgressCallback = (pct: number) => void;
 
 export function toUrl(idOrUrl: string): string | null {
@@ -72,7 +94,7 @@ export function getVideoFilename(url: string, opts: DownloadOptions): Promise<st
     p.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp metadata failed (code ${code}): ${err.trim()}`)); return; }
+      if (code !== 0) { reject(ytdlpError(err, code ?? 1)); return; }
       resolve(out.trim() || `video.${ext}`);
     });
   });
@@ -107,7 +129,7 @@ export function downloadToTemp(url: string, opts: DownloadOptions, tmpDir: strin
     proc.on('error', reject);
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`yt-dlp exited ${code}: ${stderrBuf.slice(-500).trim()}`));
+        reject(ytdlpError(stderrBuf, code ?? 1));
         return;
       }
       const fileStream = fs.createReadStream(tmpPath);
@@ -131,7 +153,7 @@ export function downloadToFile(url: string, opts: DownloadOptions, outPath: stri
     proc.on('error', reject);
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`yt-dlp exited ${code}: ${stderrBuf.slice(-500).trim()}`));
+        reject(ytdlpError(stderrBuf, code ?? 1));
         return;
       }
       resolve(fs.createReadStream(outPath));
@@ -153,7 +175,7 @@ export function getPlaylistIds(playlistId: string, cookies?: string): Promise<st
     p.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`yt-dlp playlist failed (code ${code}): ${err.trim()}`)); return; }
+      if (code !== 0) { reject(ytdlpError(err, code ?? 1)); return; }
       resolve(out.split('\n').map(l => l.trim()).filter(Boolean));
     });
   });

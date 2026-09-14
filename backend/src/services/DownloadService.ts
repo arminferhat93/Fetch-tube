@@ -21,11 +21,11 @@ function resolveCookiesFile(): string | undefined {
   const p = process.env.COOKIES_FILE;
   if (!p) return undefined;
   const stat = fs.statSync(p, { throwIfNoEntry: false });
-  if (!stat || !stat.isFile() || stat.size === 0) {
-    if (stat) process.stderr.write(`[cookies] COOKIES_FILE="${p}" is not a valid cookies file — skipping\n`);
-    return undefined;
+  if (stat?.isFile() && stat.size > 0) {
+    process.stderr.write(`[cookies] using cookies from ${p}\n`);
+  } else {
+    process.stderr.write(`[cookies] COOKIES_FILE="${p}" is empty or not found — yt-dlp will run unauthenticated until cookies are uploaded\n`);
   }
-  process.stderr.write(`[cookies] using cookies from ${p}\n`);
   return p;
 }
 

@@ -61,7 +61,14 @@ export async function getDownloadStatus(req: Request, res: Response): Promise<vo
       });
       break;
     }
-    case 'failed':  res.json({ status: 'failed', error: job.failedReason }); break;
+    case 'failed': {
+      const reason = job.failedReason ?? '';
+      const match = reason.match(/^\[([A-Z_]+)\]\s*([\s\S]*)/);
+      const errorCode = match?.[1];
+      const error = match ? match[2].trim() : reason;
+      res.json({ status: 'failed', error: error || 'Download failed.', ...(errorCode ? { errorCode } : {}) });
+      break;
+    }
     case 'active':  res.json({ status: 'active', progress: typeof progress === 'number' ? progress : 0 }); break;
     default:        res.json({ status: 'waiting' });
   }
@@ -109,4 +116,27 @@ export async function downloadFile(req: Request, res: Response): Promise<void> {
     log.error({ jobId, err: err.message }, 'file stream error');
     if (!res.headersSent) res.status(500).json({ error: 'Failed to stream file' });
   });
+}
+
+export async function uploadCookies(req: Request, res: Response): Promise<void> {
+  const cookiesFile = process.env.COOKIES_FILE;
+  if (!cookiesFile) {
+    res.status(503).json({ error: 'Server is not configured for cookies (COOKIES_FILE not set).' });
+    return;
+  }
+
+  const content = req.body as string;
+  if (typeof content !== 'string' || !content.trim()) {
+    res.status(400).json({ error: 'Request body must be non-empty cookies file content.' });
+    return;
+  }
+
+  try {
+    fs.writeFileSync(cookiesFile, content, 'utf-8');
+    log.info({ cookiesFile }, 'cookies file updated via API');
+    res.json({ ok: true });
+  } catch (err) {
+    log.error({ err: (err as Error).message }, 'failed to write cookies file');
+    res.status(500).json({ error: 'Failed to write cookies file — check COOKIES_HOST_PATH is set on the server.' });
+  }
 }
