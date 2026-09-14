@@ -11,10 +11,14 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 3000,
+
+    allowedHosts: ["fetch-tube.com", "www.fetch-tube.com"],
+
     hmr: {
-      host: "localhost",
-      port: 3000,
+      host: "fetch-tube.com",
+      clientPort: 80,
     },
+
     watch: {
       usePolling: true,
     },
