@@ -32,7 +32,7 @@ services:
       - ./backend:/app
       - /app/node_modules
       - downloads_data:/tmp/downloads
-      - ${COOKIES_HOST_PATH:-/dev/null}:/app/cookies.txt:ro
+      - ${COOKIES_HOST_PATH:-/dev/null}:/app/cookies.txt
 
   frontend:
     build:
