@@ -16,8 +16,6 @@ services:
       context: ./backend
     command: npm run dev:docker
     restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:-4000}:4000"
     environment:
       PORT: "4000"
       REDIS_URL: "redis://redis:6379"
@@ -39,13 +37,9 @@ services:
   frontend:
     build:
       context: ./frontend
-      target: dev
-    command: npm run dev
     restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       VITE_API_URL: ${VITE_API_URL:-/api}
       VITE_SITE_URL: ${VITE_SITE_URL:-}
       VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
@@ -53,9 +47,17 @@ services:
       VITE_CREATED_BY: ${VITE_CREATED_BY:-}
     depends_on:
       - backend
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
 
 volumes:
   redis_data:
