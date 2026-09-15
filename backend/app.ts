@@ -49,6 +49,9 @@ const swaggerDoc = yaml.load(
 ) as object;
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 
+// Text body parser scoped to the cookies upload endpoint
+app.use('/api/cookies', express.text({ limit: '2mb', type: 'text/plain' }));
+
 // API routes (rate limiters applied per-route inside the router)
 app.use('/api', downloadRoutes);
 
