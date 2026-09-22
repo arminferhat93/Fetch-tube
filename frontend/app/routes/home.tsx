@@ -4,7 +4,6 @@ import {
   createDownload,
   getJobStatus,
   getDownloadUrl,
-  uploadCookies,
   type DownloadMode,
   type JobState,
   type JobStatus,
@@ -121,7 +120,7 @@ const JSON_LD_FAQ = {
       name: 'Why does the download say "Sign in to confirm"?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'YouTube occasionally requires authentication to verify the request is not automated. You can resolve this by uploading valid YouTube cookies via the Update Cookies option that appears in the error message.',
+        text: 'FetchTube uses an authenticated download method that bypasses YouTube bot detection. If you see this error, try again in a few seconds — it is usually temporary.',
       },
     },
   ],
@@ -459,11 +458,6 @@ export default function Home() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
 
-  const [cookiesText, setCookiesText]         = useState("");
-  const [cookiesUploading, setCookiesUploading] = useState(false);
-  const [cookiesError, setCookiesError]         = useState<string | null>(null);
-  const [cookiesOk, setCookiesOk]               = useState(false);
-  const [showCookiesPanel, setShowCookiesPanel] = useState(false);
 
   const prevJobState   = useRef<JobState | null>(null);
   const intervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -569,22 +563,6 @@ export default function Home() {
     }
   };
 
-  const handleCookiesUpload = async () => {
-    if (!cookiesText.trim()) return;
-    setCookiesUploading(true);
-    setCookiesError(null);
-    setCookiesOk(false);
-    try {
-      await uploadCookies(cookiesText);
-      setCookiesOk(true);
-      setCookiesText("");
-    } catch (err) {
-      setCookiesError((err as Error).message);
-    } finally {
-      setCookiesUploading(false);
-    }
-  };
-
   const handleReset = () => {
     stopPolling();
     setJobId(null);
@@ -592,10 +570,6 @@ export default function Home() {
     setFormState("idle");
     setInput("");
     setInputError(null);
-    setCookiesText("");
-    setCookiesError(null);
-    setCookiesOk(false);
-    setShowCookiesPanel(false);
     prevJobState.current  = null;
     downloadMeta.current  = null;
   };
@@ -818,68 +792,6 @@ export default function Home() {
                   <p className="text-sm text-red-400 bg-red-500/5 border border-red-500/10 rounded-lg px-3 py-2">
                     {jobStatus?.error ?? "An unknown error occurred."}
                   </p>
-
-                  {/* Cookies upload panel — shown when YouTube blocks without auth */}
-                  {jobStatus?.errorCode === "AUTH_REQUIRED" && (
-                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setShowCookiesPanel((v) => !v)}
-                        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-amber-500/5 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          <span className="text-sm font-medium text-amber-300">Update YouTube cookies</span>
-                        </div>
-                        <svg
-                          className={`w-4 h-4 text-amber-500/70 transition-transform duration-200 ${showCookiesPanel ? "rotate-180" : ""}`}
-                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-
-                      {showCookiesPanel && (
-                        <div className="px-4 pb-4 space-y-3 border-t border-amber-500/15 pt-3">
-                          <ol className="space-y-1.5 text-xs text-zinc-400">
-                            <li className="flex gap-2"><span className="text-amber-500/70 font-mono w-3 flex-shrink-0">1.</span><span>Install <strong className="text-zinc-300">Get cookies.txt LOCALLY</strong> extension in Chrome or Firefox.</span></li>
-                            <li className="flex gap-2"><span className="text-amber-500/70 font-mono w-3 flex-shrink-0">2.</span><span>Open <strong className="text-zinc-300">youtube.com</strong> and make sure you are signed in.</span></li>
-                            <li className="flex gap-2"><span className="text-amber-500/70 font-mono w-3 flex-shrink-0">3.</span><span>Click the extension icon and export cookies for youtube.com.</span></li>
-                            <li className="flex gap-2"><span className="text-amber-500/70 font-mono w-3 flex-shrink-0">4.</span><span>Open the downloaded <code className="bg-zinc-800 px-1 rounded">.txt</code> file, copy all its content, and paste it below.</span></li>
-                          </ol>
-
-                          <textarea
-                            value={cookiesText}
-                            onChange={(e) => { setCookiesText(e.target.value); setCookiesError(null); setCookiesOk(false); }}
-                            placeholder="# Netscape HTTP Cookie File&#10;.youtube.com TRUE / FALSE ..."
-                            rows={4}
-                            className="w-full bg-zinc-950/80 border border-zinc-700/60 rounded-lg px-3 py-2 text-xs text-zinc-300 placeholder-zinc-700 font-mono resize-none outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20"
-                          />
-
-                          {cookiesError && (
-                            <p className="text-xs text-red-400">{cookiesError}</p>
-                          )}
-                          {cookiesOk && (
-                            <p className="text-xs text-green-400">Cookies uploaded — try downloading again.</p>
-                          )}
-
-                          <button
-                            type="button"
-                            disabled={cookiesUploading || !cookiesText.trim()}
-                            onClick={handleCookiesUpload}
-                            className="w-full py-2 rounded-lg text-sm font-medium text-amber-900
-                              bg-amber-400 hover:bg-amber-300 disabled:bg-zinc-700 disabled:text-zinc-500
-                              transition-colors"
-                          >
-                            {cookiesUploading ? "Uploading…" : "Upload cookies"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   <button
                     onClick={handleReset}

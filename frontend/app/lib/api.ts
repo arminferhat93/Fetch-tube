@@ -52,15 +52,3 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 export function getDownloadUrl(jobId: string): string {
   return `${API_BASE}/api/downloads/${jobId}/file`;
 }
-
-export async function uploadCookies(content: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/cookies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: content,
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
-}
