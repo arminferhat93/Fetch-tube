@@ -22,9 +22,7 @@ export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
 
-const GA_ID = import.meta.env.PROD
-  ? (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined)
-  : undefined;
+const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
