@@ -29,6 +29,11 @@ function ytdlpError(stderr: string, exitCode: number): Error {
 
 export type ProgressCallback = (pct: number) => void;
 
+function buildAuthArgs(cookies?: string): string[] {
+  if (cookies) return ['--cookies', cookies];
+  return [];
+}
+
 export function toUrl(idOrUrl: string): string | null {
   const trimmed = idOrUrl.trim();
   if (!trimmed) return null;
@@ -53,20 +58,20 @@ function checkBinary(bin: string, versionFlag = '--version'): Promise<boolean> {
   });
 }
 
-// android client bypasses bot-detection and the tv-client DRM experiment; web is the fallback.
-const EXTRACTOR_ARGS = '--extractor-args=youtube:player_client=android,web';
+// android client bypasses bot-detection without needing authentication.
+const EXTRACTOR_ARGS: string[] = ['--extractor-args=youtube:player_client=android,web'];
 
 function buildFormatArgs(opts: DownloadOptions): string[] {
   if (opts.mode === 'video') {
     const quality = opts.quality ?? 1080;
     return [
-      EXTRACTOR_ARGS,
+      ...EXTRACTOR_ARGS,
       '-f', `bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}]`,
       '--merge-output-format', 'mp4',
     ];
   }
   const bitrate = opts.bitrate ?? 192;
-  return [EXTRACTOR_ARGS, '-x', '--audio-format', 'mp3', '--audio-quality', `${bitrate}K`];
+  return [...EXTRACTOR_ARGS, '-x', '--audio-format', 'mp3', '--audio-quality', `${bitrate}K`];
 }
 
 // Attaches a stderr listener that parses yt-dlp's "[download] X%" progress lines.
@@ -84,8 +89,8 @@ function watchProgress(stderr: NodeJS.ReadableStream, onProgress: ProgressCallba
 
 export function getVideoFilename(url: string, opts: DownloadOptions): Promise<string> {
   const ext = opts.mode === 'audio' ? 'mp3' : 'mp4';
-  const args = [url, EXTRACTOR_ARGS, '--print', `%(title)s.${ext}`, '--no-download', '--no-warnings'];
-  if (opts.cookies) args.push('--cookies', opts.cookies);
+  const args = [url, ...EXTRACTOR_ARGS, '--print', `%(title)s.${ext}`, '--no-download', '--no-warnings'];
+  args.push(...buildAuthArgs(opts.cookies));
   return new Promise((resolve, reject) => {
     const p = spawn('yt-dlp', args);
     let out = '';
@@ -103,7 +108,7 @@ export function getVideoFilename(url: string, opts: DownloadOptions): Promise<st
 // Audio-only: pipes yt-dlp stdout directly — no temp file written.
 export function createAudioStream(url: string, opts: DownloadOptions, onProgress?: ProgressCallback): Readable {
   const args = [url, ...buildFormatArgs(opts), '-o', '-', '--no-playlist', '--no-warnings'];
-  if (opts.cookies) args.push('--cookies', opts.cookies);
+  args.push(...buildAuthArgs(opts.cookies));
   const proc = spawn('yt-dlp', args);
   if (onProgress) {
     watchProgress(proc.stderr, onProgress);
@@ -119,7 +124,7 @@ export function downloadToTemp(url: string, opts: DownloadOptions, tmpDir: strin
   const ext = opts.mode === 'audio' ? 'mp3' : 'mp4';
   const tmpPath = path.join(tmpDir, `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
   const args = [url, ...buildFormatArgs(opts), '-o', tmpPath, '--no-playlist'];
-  if (opts.cookies) args.push('--cookies', opts.cookies);
+  args.push(...buildAuthArgs(opts.cookies));
 
   return new Promise((resolve, reject) => {
     let stderrBuf = '';
@@ -143,7 +148,7 @@ export function downloadToTemp(url: string, opts: DownloadOptions, tmpDir: strin
 // Used in DEV_KEEP_FILES mode so raw tracks can be inspected before the ZIP.
 export function downloadToFile(url: string, opts: DownloadOptions, outPath: string, onProgress?: ProgressCallback): Promise<Readable> {
   const args = [url, ...buildFormatArgs(opts), '-o', outPath, '--no-playlist'];
-  if (opts.cookies) args.push('--cookies', opts.cookies);
+  args.push(...buildAuthArgs(opts.cookies));
 
   return new Promise((resolve, reject) => {
     let stderrBuf = '';
@@ -164,9 +169,9 @@ export function downloadToFile(url: string, opts: DownloadOptions, outPath: stri
 export function getPlaylistIds(playlistId: string, cookies?: string): Promise<string[]> {
   const args = [
     `https://www.youtube.com/playlist?list=${playlistId}`,
-    EXTRACTOR_ARGS, '--flat-playlist', '--print', 'id', '--no-warnings',
+    ...EXTRACTOR_ARGS, '--flat-playlist', '--print', 'id', '--no-warnings',
   ];
-  if (cookies) args.push('--cookies', cookies);
+  args.push(...buildAuthArgs(cookies));
   return new Promise((resolve, reject) => {
     const p = spawn('yt-dlp', args);
     let out = '';
@@ -184,11 +189,11 @@ export function getPlaylistIds(playlistId: string, cookies?: string): Promise<st
 export function getPlaylistTitle(playlistId: string, cookies?: string): Promise<string | null> {
   const args = [
     `https://www.youtube.com/playlist?list=${playlistId}`,
-    EXTRACTOR_ARGS, '--print', 'playlist_title',
+    ...EXTRACTOR_ARGS, '--print', 'playlist_title',
     '--playlist-items', '1',
     '--no-warnings',
   ];
-  if (cookies) args.push('--cookies', cookies);
+  args.push(...buildAuthArgs(cookies));
   return new Promise((resolve) => {
     const p = spawn('yt-dlp', args);
     let out = '';

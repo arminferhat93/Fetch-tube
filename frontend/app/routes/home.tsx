@@ -483,7 +483,7 @@ export default function Home() {
 
         if (prevJobState.current !== status.status) {
           if (status.status === "active") {
-            addToast({ type: "info", title: "Downloading", message: "Worker picked up your job." });
+            addToast({ type: "info", title: "Downloading", message: "FetchTube is processing your request." });
           }
           prevJobState.current = status.status;
         }
@@ -562,7 +562,7 @@ export default function Home() {
       setJobId(res.jobId);
       setJobStatus(null);
       setFormState("polling");
-      addToast({ type: "info", title: "Queued", message: `Job #${res.jobId} added to queue.` });
+      //addToast({ type: "info", title: "Queued", message: `Job #${res.jobId} added to queue.` });
     } catch (err) {
       setFormState("idle");
       addToast({ type: "error", title: "Error", message: (err as Error).message });
