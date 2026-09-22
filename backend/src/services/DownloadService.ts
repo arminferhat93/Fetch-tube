@@ -23,10 +23,10 @@ function resolveCookiesFile(): string | undefined {
   const stat = fs.statSync(p, { throwIfNoEntry: false });
   if (stat?.isFile() && stat.size > 0) {
     process.stderr.write(`[cookies] using cookies from ${p}\n`);
-  } else {
-    process.stderr.write(`[cookies] COOKIES_FILE="${p}" is empty or not found — yt-dlp will run unauthenticated until cookies are uploaded\n`);
+    return p;
   }
-  return p;
+  process.stderr.write(`[cookies] no valid cookies file — running unauthenticated\n`);
+  return undefined;
 }
 
 const COOKIES_FILE = resolveCookiesFile();
